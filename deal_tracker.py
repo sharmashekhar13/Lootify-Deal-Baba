@@ -28,15 +28,11 @@ def send_telegram_message(message):
     }
     try:
         response = requests.post(url, json=payload, timeout=10)
-        print(f"Telegram API Response Status: {response.status_code}")
-        print(f"Telegram API Response Body: {response.text}")
+        print(f"Telegram API Status: {response.status_code}")
     except Exception as e:
         print(f"Failed to send message: {e}")
 
 def fetch_and_filter_deals():
-    # Sends a test message every run to confirm Telegram connection
-    send_telegram_message("🤖 *Lootify Bot Active!* Scanning for heavy discount deals...")
-    
     rss_urls = [
         "https://www.desidime.com/deals.rss",
         "https://www.desidime.com/top-deals.rss"
@@ -50,7 +46,6 @@ def fetch_and_filter_deals():
         for entry in feed.entries:
             title = entry.title
             link = entry.link
-            summary = entry.get("summary", "")
             
             if link not in sent_deals:
                 store = "Flipkart" if "flipkart" in title.lower() or "flipkart" in link.lower() else \
@@ -58,7 +53,7 @@ def fetch_and_filter_deals():
                         "Myntra" if "myntra" in title.lower() or "myntra" in link.lower() else \
                         "E-Commerce Deal"
                 
-                message = f"🚨 *HEAVY DISCOUNT ALERT ({store})*\n\n" \
+                message = f"🚨 *NEW LOOT DEAL ({store})*\n\n" \
                           f"📦 *Product:* {title}\n" \
                           f"🛒 *Store:* {store}\n\n" \
                           f"🔗 *Direct Link:* [Buy / View Deal]({link})"
@@ -67,7 +62,7 @@ def fetch_and_filter_deals():
                 new_sent_deals.add(link)
                 deals_sent += 1
 
-    print(f"Total deals sent in this run: {deals_sent}")
+    print(f"Total new deals sent in this run: {deals_sent}")
 
     with open(CACHE_FILE, "w") as f:
         json.dump(list(new_sent_deals), f)
