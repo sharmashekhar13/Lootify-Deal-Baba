@@ -27,61 +27,83 @@ def send_telegram_message(message):
     }
     try:
         response = requests.post(url, json=payload, timeout=10)
-        print(f"Telegram Status: {response.status_code}")
-        print(f"Telegram Response: {response.text}")
+        print("Telegram Status Code:", response.status_code)
+        print("Telegram Response Text:", response.text)
     except Exception as e:
         print(f"Failed to send message: {e}")
 
 def fetch_and_send_deals():
-    # RSS-to-JSON API proxy to bypass Datacenter IP blocking
-    sources = [
-        "https://api.rss2json.com/v1/api.json?rss_url=https://www.desidime.com/deals.rss",
-        "https://api.rss2json.com/v1/api.json?rss_url=https://www.desidime.com/top-deals.rss"
-    ]
-    
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
-    
+
     new_sent_deals = set(sent_deals)
     deals_sent = 0
 
-    for source_url in sources:
-        try:
-            resp = requests.get(source_url, headers=headers, timeout=15)
-            data = resp.json()
-            
-            if data.get("status") == "ok" and "items" in data:
-                for item in data["items"]:
-                    title = item.get("title", "")
-                    link = item.get("link", "")
+    # Source 1: RSS2JSON DesiDime Deals
+    try:
+        url = "https://api.rss2json.com/v1/api.json?rss_url=https://www.desidime.com/deals.rss"
+        resp = requests.get(url, headers=headers, timeout=15)
+        data = resp.json()
+        if data.get("status") == "ok" and "items" in data:
+            for item in data["items"]:
+                title = item.get("title", "")
+                link = item.get("link", "")
+                if link and link not in sent_deals:
+                    store = "Flipkart" if "flipkart" in title.lower() or "flipkart" in link.lower() else \
+                            "Amazon" if "amazon" in title.lower() or "amazon" in link.lower() else \
+                            "Myntra" if "myntra" in title.lower() or "myntra" in link.lower() else \
+                            "E-Commerce"
+
+                    msg = f"🚨 *LOOT DEAL ALERT ({store})*\n\n" \
+                          f"📦 *Product:* {title}\n" \
+                          f"🛒 *Store:* {store}\n\n" \
+                          f"🔗 *Direct Link:* [Buy / View Deal]({link})"
                     
-                    if link and link not in sent_deals:
-                        store = "Flipkart" if "flipkart" in title.lower() or "flipkart" in link.lower() else \
-                                "Amazon" if "amazon" in title.lower() or "amazon" in link.lower() else \
-                                "Myntra" if "myntra" in title.lower() or "myntra" in link.lower() else \
-                                "Ajio" if "ajio" in title.lower() or "ajio" in link.lower() else \
-                                "E-Commerce Deal"
+                    send_telegram_message(msg)
+                    new_sent_deals.add(link)
+                    sent_deals.add(link)
+                    deals_sent += 1
+                    if deals_sent >= 5:
+                        break
+    except Exception as e:
+        print(f"Source 1 error: {e}")
 
-                        message = f"🚨 *LOOT DEAL ALERT ({store})*\n\n" \
-                                  f"📦 *Product:* {title}\n" \
-                                  f"🛒 *Store:* {store}\n\n" \
-                                  f"🔗 *Direct Link:* [Buy / View Deal]({link})"
+    # Source 2: Reddit Deals India (Fallback)
+    if deals_sent < 3:
+        try:
+            url = "https://www.reddit.com/r/dealsindia/new.json?limit=10"
+            resp = requests.get(url, headers=headers, timeout=15)
+            data = resp.json()
+            posts = data.get("data", {}).get("children", [])
+            for post in posts:
+                pdata = post.get("data", {})
+                title = pdata.get("title", "")
+                link = pdata.get("url", "")
+                permalink = f"https://reddit.com{pdata.get('permalink', '')}"
+                
+                target_link = link if link.startswith("http") else permalink
 
-                        send_telegram_message(message)
-                        new_sent_deals.add(link)
-                        sent_deals.add(link)
-                        deals_sent += 1
+                if target_link and target_link not in sent_deals:
+                    store = "Flipkart" if "flipkart" in title.lower() or "flipkart" in target_link.lower() else \
+                            "Amazon" if "amazon" in title.lower() or "amazon" in target_link.lower() else \
+                            "Deals India"
 
-                        if deals_sent >= 5:
-                            break
+                    msg = f"🚨 *LOOT DEAL ALERT ({store})*\n\n" \
+                          f"📦 *Product:* {title}\n" \
+                          f"🛒 *Store:* {store}\n\n" \
+                          f"🔗 *Direct Link:* [Buy / View Deal]({target_link})"
+                    
+                    send_telegram_message(msg)
+                    new_sent_deals.add(target_link)
+                    sent_deals.add(target_link)
+                    deals_sent += 1
+                    if deals_sent >= 5:
+                        break
         except Exception as e:
-            print(f"Error fetching source {source_url}: {e}")
+            print(f"Source 2 error: {e}")
 
-        if deals_sent >= 5:
-            break
-
-    print(f"Total deals sent in this run: {deals_sent}")
+    print(f"Total deals sent in this execution: {deals_sent}")
 
     with open(CACHE_FILE, "w") as f:
         json.dump(list(new_sent_deals), f)
