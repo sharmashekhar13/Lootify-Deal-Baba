@@ -4,16 +4,17 @@ import json
 import requests
 import feedparser
 
-# Telegram Credentials from Environment Variables
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
 CACHE_FILE = "sent_deals.json"
 
-# Load sent deal history to avoid duplicates
 if os.path.exists(CACHE_FILE):
-    with open(CACHE_FILE, "r") as f:
-        sent_deals = set(json.load(f))
+    try:
+        with open(CACHE_FILE, "r") as f:
+            sent_deals = set(json.load(f))
+    except Exception:
+        sent_deals = set()
 else:
     sent_deals = set()
 
@@ -26,18 +27,23 @@ def send_telegram_message(message):
         "disable_web_page_preview": False
     }
     try:
-        requests.post(url, json=payload, timeout=10)
+        response = requests.post(url, json=payload, timeout=10)
+        print(f"Telegram API Response Status: {response.status_code}")
+        print(f"Telegram API Response Body: {response.text}")
     except Exception as e:
         print(f"Failed to send message: {e}")
 
 def fetch_and_filter_deals():
-    # Deal Feed Aggregators covering Amazon, Flipkart, Myntra, Ajio, Tata CLiQ
+    # Sends a test message every run to confirm Telegram connection
+    send_telegram_message("🤖 *Lootify Bot Active!* Scanning for heavy discount deals...")
+    
     rss_urls = [
         "https://www.desidime.com/deals.rss",
         "https://www.desidime.com/top-deals.rss"
     ]
     
     new_sent_deals = set(sent_deals)
+    deals_sent = 0
     
     for rss_url in rss_urls:
         feed = feedparser.parse(rss_url)
@@ -46,27 +52,23 @@ def fetch_and_filter_deals():
             link = entry.link
             summary = entry.get("summary", "")
             
-            # Check for discount percentage (75% to 99% off)
-            discount_match = re.search(r'(\b[7-9][5-9]%\b|\b90%\b|\b95%\b|\b99%\b|\b80%\b|\b85%\b)', title + " " + summary)
-            
-            if discount_match and link not in sent_deals:
-                # Identify Store Name
+            if link not in sent_deals:
                 store = "Flipkart" if "flipkart" in title.lower() or "flipkart" in link.lower() else \
                         "Amazon" if "amazon" in title.lower() or "amazon" in link.lower() else \
                         "Myntra" if "myntra" in title.lower() or "myntra" in link.lower() else \
                         "E-Commerce Deal"
                 
-                # Format Alert
                 message = f"🚨 *HEAVY DISCOUNT ALERT ({store})*\n\n" \
                           f"📦 *Product:* {title}\n" \
-                          f"🔥 *Discount:* 75%+ OFF\n" \
                           f"🛒 *Store:* {store}\n\n" \
                           f"🔗 *Direct Link:* [Buy / View Deal]({link})"
                 
                 send_telegram_message(message)
                 new_sent_deals.add(link)
+                deals_sent += 1
 
-    # Save updated deal history
+    print(f"Total deals sent in this run: {deals_sent}")
+
     with open(CACHE_FILE, "w") as f:
         json.dump(list(new_sent_deals), f)
 
