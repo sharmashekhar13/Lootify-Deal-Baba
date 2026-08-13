@@ -2,8 +2,18 @@ import os
 import json
 import requests
 
-TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8864579611:AAHXfBbUXvvbumfhZgOwWC0x1u5iGJX_Lrc")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "-1003960961427")
+CACHE_FILE = "sent_deals.json"
+
+if os.path.exists(CACHE_FILE):
+    try:
+        with open(CACHE_FILE, "r") as f:
+            sent_deals = set(json.load(f))
+    except Exception:
+        sent_deals = set()
+else:
+    sent_deals = set()
 
 def send_telegram_message(message):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -15,10 +25,9 @@ def send_telegram_message(message):
     }
     try:
         response = requests.post(url, json=payload, timeout=12)
-        print(f"Telegram API Status Code: {response.status_code}")
-        print(f"Telegram Response: {response.text}")
+        print(f"Telegram API Status: {response.status_code}")
     except Exception as e:
-        print(f"Error sending message to Telegram: {e}")
+        print(f"Error sending to Telegram: {e}")
 
 def get_store_name(title, link):
     text = (title + " " + link).lower()
@@ -30,98 +39,66 @@ def get_store_name(title, link):
         return "Myntra"
     elif "ajio" in text:
         return "Ajio"
-    elif "meesho" in text:
-        return "Meesho"
-    elif "tatacliq" in text:
-        return "Tata CLiQ"
     return "E-Commerce Loot"
 
 def fetch_and_send_deals():
-    reddit_headers = {
-        "User-Agent": "LootifyDealBot/1.0 (by /u/sharmashekhar13)"
-    }
-    browser_headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    }
-
+    reddit_headers = {"User-Agent": "LootifyDealBot/1.0"}
+    browser_headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36"}
     deals_collected = []
 
-    # Source 1: Reddit Deals India
+    # Fetch from Reddit Deals India
     try:
-        url = "https://www.reddit.com/r/dealsindia/new.json?limit=25"
-        res = requests.get(url, headers=reddit_headers, timeout=10)
-        print(f"Source 1 Status: {res.status_code}")
+        res = requests.get("https://www.reddit.com/r/dealsindia/new.json?limit=25", headers=reddit_headers, timeout=10)
         if res.status_code == 200:
-            posts = res.json().get("data", {}).get("children", [])
-            for p in posts:
+            for p in res.json().get("data", {}).get("children", []):
                 data = p.get("data", {})
                 title = data.get("title", "").strip()
                 link = data.get("url", "").strip()
-                permalink = f"https://reddit.com{data.get('permalink', '')}"
-                target_link = link if link.startswith("http") and "reddit.com" not in link else permalink
-                
-                if title and target_link:
-                    deals_collected.append((title, target_link))
+                if title and link:
+                    deals_collected.append((title, link))
     except Exception as e:
-        print(f"Source 1 Error: {e}")
+        print(f"Reddit Error: {e}")
 
-    # Source 2: DesiDime Deals via rss2json
+    # Fetch from DesiDime RSS
     try:
-        url = "https://api.rss2json.com/v1/api.json?rss_url=https%3A%2F%2Fwww.desidime.com%2Fdeals.rss"
-        res = requests.get(url, headers=browser_headers, timeout=10)
-        print(f"Source 2 Status: {res.status_code}")
+        res = requests.get("https://api.rss2json.com/v1/api.json?rss_url=https%3A%2F%2Fwww.desidime.com%2Fdeals.rss", headers=browser_headers, timeout=10)
         if res.status_code == 200:
-            items = res.json().get("items", [])
-            for item in items:
+            for item in res.json().get("items", []):
                 title = item.get("title", "").strip()
                 link = item.get("link", "").strip()
                 if title and link:
                     deals_collected.append((title, link))
     except Exception as e:
-        print(f"Source 2 Error: {e}")
+        print(f"DesiDime Error: {e}")
 
-    # Source 3: Reddit IndianGaming Deals
-    try:
-        url = "https://www.reddit.com/r/IndianGaming/new.json?limit=25"
-        res = requests.get(url, headers=reddit_headers, timeout=10)
-        print(f"Source 3 Status: {res.status_code}")
-        if res.status_code == 200:
-            posts = res.json().get("data", {}).get("children", [])
-            for p in posts:
-                data = p.get("data", {})
-                title = data.get("title", "").strip()
-                link = data.get("url", "").strip()
-                permalink = f"https://reddit.com{data.get('permalink', '')}"
-                target_link = link if link.startswith("http") and "reddit.com" not in link else permalink
-                
-                if title and target_link and any(kw in title.lower() for kw in ["deal", "sale", "off", "price"]):
-                    deals_collected.append((title, target_link))
-    except Exception as e:
-        print(f"Source 3 Error: {e}")
-
-    # Deduplicate while preserving order
     unique_deals = []
-    seen_links = set()
+    seen_links = set(sent_deals)
     for t, l in deals_collected:
         if l not in seen_links:
             seen_links.add(l)
             unique_deals.append((t, l))
 
-    print(f"Total unique deals fetched: {len(unique_deals)}")
-
-    # Send top 5 deals directly to Telegram
     sent_count = 0
+    new_sent_deals = set(sent_deals)
+
     for title, link in unique_deals[:5]:
         store = get_store_name(title, link)
-        message = f"🚨 *LOOT DEAL ALERT ({store})*\n\n" \
+        message = f"🚨 *HEAVY DISCOUNT LOOT DEAL ({store})*\n\n" \
                   f"📦 *Product:* {title}\n" \
                   f"🛒 *Store:* {store}\n\n" \
                   f"🔗 *Direct Link:* [Buy / View Deal]({link})"
         
         send_telegram_message(message)
+        new_sent_deals.add(link)
         sent_count += 1
 
     print(f"Successfully sent {sent_count} deal alerts to Telegram.")
+
+    try:
+        with open(CACHE_FILE, "w") as f:
+            json.dump(list(new_sent_deals), f)
+    except Exception as e:
+        print(f"Cache save note: {e}")
 
 if __name__ == "__main__":
     fetch_and_send_deals()
