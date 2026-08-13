@@ -3,7 +3,7 @@ name: 15-Minute Deal Tracker
 on:
   schedule:
     - cron: '*/15 * * * *'  # Runs every 15 minutes
-  workflow_dispatch:        # Allows manual testing
+  workflow_dispatch:        # Allows manual run trigger
 
 jobs:
   track-deals:
@@ -19,7 +19,7 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          pip install requests feedparser
+          pip install requests
 
       - name: Run Deal Tracker
         env:
@@ -27,11 +27,3 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           python deal_tracker.py
-
-      - name: Commit Updated Cache
-        run: |
-          git config --global user.name 'Deal Bot'
-          git config --global user.email 'bot@github.com'
-          git add sent_deals.json || true
-          git commit -m "Update sent deals cache" || true
-          git push || true
