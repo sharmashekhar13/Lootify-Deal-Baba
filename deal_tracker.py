@@ -14,11 +14,11 @@ def send_telegram_message(message):
         "disable_web_page_preview": False
     }
     try:
-        response = requests.post(url, json=payload, timeout=10)
-        print(f"Telegram Post Status: {response.status_code}")
+        response = requests.post(url, json=payload, timeout=12)
+        print(f"Telegram API Status Code: {response.status_code}")
         print(f"Telegram Response: {response.text}")
     except Exception as e:
-        print(f"Error sending to Telegram: {e}")
+        print(f"Error sending message to Telegram: {e}")
 
 def get_store_name(title, link):
     text = (title + " " + link).lower()
@@ -37,21 +37,20 @@ def get_store_name(title, link):
     return "E-Commerce Loot"
 
 def fetch_and_send_deals():
-    # Custom API User-Agent to prevent Reddit/DesiDime from blocking requests
     reddit_headers = {
-        "User-Agent": "LootifyDealBot/1.0 (Contact: sharmashekhar13@gmail.com)"
+        "User-Agent": "LootifyDealBot/1.0 (by /u/sharmashekhar13)"
     }
     browser_headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
-    
+
     deals_collected = []
-    
+
     # Source 1: Reddit Deals India
     try:
         url = "https://www.reddit.com/r/dealsindia/new.json?limit=25"
         res = requests.get(url, headers=reddit_headers, timeout=10)
-        print(f"Source 1 (Reddit dealsindia) Status: {res.status_code}")
+        print(f"Source 1 Status: {res.status_code}")
         if res.status_code == 200:
             posts = res.json().get("data", {}).get("children", [])
             for p in posts:
@@ -66,11 +65,11 @@ def fetch_and_send_deals():
     except Exception as e:
         print(f"Source 1 Error: {e}")
 
-    # Source 2: DesiDime via Encoded RSS2JSON
+    # Source 2: DesiDime Deals via rss2json
     try:
         url = "https://api.rss2json.com/v1/api.json?rss_url=https%3A%2F%2Fwww.desidime.com%2Fdeals.rss"
         res = requests.get(url, headers=browser_headers, timeout=10)
-        print(f"Source 2 (DesiDime) Status: {res.status_code}")
+        print(f"Source 2 Status: {res.status_code}")
         if res.status_code == 200:
             items = res.json().get("items", [])
             for item in items:
@@ -85,7 +84,7 @@ def fetch_and_send_deals():
     try:
         url = "https://www.reddit.com/r/IndianGaming/new.json?limit=25"
         res = requests.get(url, headers=reddit_headers, timeout=10)
-        print(f"Source 3 (IndianGaming) Status: {res.status_code}")
+        print(f"Source 3 Status: {res.status_code}")
         if res.status_code == 200:
             posts = res.json().get("data", {}).get("children", [])
             for p in posts:
