@@ -23,8 +23,8 @@ jobs:
 
       - name: Run Deal Tracker
         env:
-          TELEGRAM_BOT_TOKEN: ${{8864579611:AAHXfBbUXvvbumfhZg0wWC0x1u5iGJX_Lrc}}
-          TELEGRAM_CHAT_ID: ${{6340558223}}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           python deal_tracker.py
 
